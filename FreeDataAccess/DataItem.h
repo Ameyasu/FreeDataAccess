@@ -39,7 +39,7 @@ public:
 	/// </summary>
 	/// <param name="elementPointer">配列の先頭のポインタ</param>
 	/// <param name="elementCount">配列の要素数</param>
-	/// <param name="deepCopy">true=Deepコピー, false=Shallowコピー</param>
+	/// <param name="deepCopy">true=Deepコピー(default), false=Shallowコピー</param>
 	template<typename T>
 	DataItem(T* elementPointer, size_t elementCount, bool deepCopy = true);
 
@@ -53,8 +53,7 @@ public:
 	DataItem(const T* elementPointer, size_t elementCount);
 
 	/// <summary>
-	/// <para>DataItemの状態値を示す文字列から、状態値を生成する</para>
-	/// <para>書式が間違っていると例外</para>
+	/// <para>ヌル終端文字列を設定する</para>
 	/// </summary>
 	DataItem(const char* text);
 
@@ -72,6 +71,13 @@ public:
 	DataItem& operator=(DataItem&& rhs) noexcept;
 
 	~DataItem();
+
+public:
+	/// <summary>
+	/// <para>DataItemの状態値を示す文字列から、その状態値のDataItemを生成する</para>
+	/// <para>書式が間違っていると例外</para>
+	/// </summary>
+	static DataItem createFromFormat(const char* format);
 
 public:
 	/// <returns>自身の状態値を示す文字列</returns>
@@ -230,298 +236,20 @@ inline DataItem::DataItem(const T* elementPointer, size_t elementCount)
 }
 
 inline DataItem::DataItem(const char* text)
-	: m_elementSize()
+	: m_elementSize(std::alignment_of_v<char>)
 	, m_elementCount()
 	, m_elementPointer()
-	, m_format()
-	, m_text(text)
-	, m_cache(true)
+	, m_format(getDefaultFormat<char>())
+	, m_text()
+	, m_cache()
 {
-	// HEX
-	if (text[0] == '0' && text[1] == 'x')
-	{
-		const char* p = text + 2;
-		int s = 0;
-		uint64_t v = 0;
-		while (p[0] != '\0') {
-			v <<= 4;
-			if ('0' <= p[0] && p[0] <= '9')
-				v += p[0] - '0';
-			else if ('A' <= p[0] && p[0] <= 'F')
-				v += p[0] - 'A' + 10;
-			else
-				throw;
-			++p;
-			++s;
-		}
-		s >>= 1;
-		switch (s)
-		{
-		case 1: m_elementPointer = new uint8_t(static_cast<uint8_t>(v)); break;
-		case 2: m_elementPointer = new uint16_t(static_cast<uint16_t>(v)); break;
-		case 4: m_elementPointer = new uint32_t(static_cast<uint32_t>(v)); break;
-		case 8: m_elementPointer = new uint64_t(static_cast<uint64_t>(v)); break;
-		default: throw;
-		}
-		m_elementSize = s;
-		return;
-	}
+	size_t c = 0;
+	while (text[c] != '\0') ++c;
+	++c;
 
-	// HEX array
-	if (text[0] == '{' && text[1] == '0' && text[2] == 'x')
-	{
-		int c = 1;
-		int s = 0;
-		{
-			const char* p = text + 3;
-			while (true)
-			{
-				if (p[0] == ',')
-					++c;
-				else if (p[0] == '}')
-					break;
-				else if (p[0] == '\0')
-					throw;
-				++p;
-			}
-			p = text + 3;
-			while (('0' <= p[0] && p[0] <= '9') || ('A' <= p[0] && p[0] <= 'F'))
-			{
-				++p;
-				++s;
-			}
-			s >>= 1;
-		}
-		m_elementCount = c;
-		m_elementSize = s;
-		switch (s)
-		{
-		case 1: m_elementPointer = new uint8_t[c]; break;
-		case 2: m_elementPointer = new uint16_t[c]; break;
-		case 4: m_elementPointer = new uint32_t[c]; break;
-		case 8: m_elementPointer = new uint64_t[c]; break;
-		default: throw;
-		}
-
-		const char* p = text + 3;
-		for (int i = 0; i < c; ++i)
-		{
-			uint64_t v = 0;
-			while (true) {
-				if ('0' <= p[0] && p[0] <= '9')
-				{
-					v <<= 4;
-					v += p[0] - '0';
-				}
-				else if ('A' <= p[0] && p[0] <= 'F')
-				{
-					v <<= 4;
-					v += p[0] - 'A' + 10;
-				}
-				else if (p[0] == ',' && p[1] == '0' && p[2] == 'x')
-				{
-					p += 3;
-					break;
-				}
-				else if ((p[0] == '}') && (i == c - 1))
-					break;
-				else
-					throw;
-				++p;
-			}
-			
-			switch (s)
-			{
-			case 1: static_cast<uint8_t*>(m_elementPointer)[i] = static_cast<uint8_t>(v); break;
-			case 2: static_cast<uint16_t*>(m_elementPointer)[i] = static_cast<uint16_t>(v); break;
-			case 4: static_cast<uint32_t*>(m_elementPointer)[i] = static_cast<uint32_t>(v); break;
-			case 8: static_cast<uint64_t*>(m_elementPointer)[i] = static_cast<uint64_t>(v); break;
-			}
-		}
-		return;
-	}
-
-	// REAL
-	if (text[0] == '$' || ('0' <= text[0] && text[0] <= '9') || text[0] == '-')
-	{
-		const char* p = text;
-		if (text[0] == '$')
-		{
-			m_elementSize = sizeof(float);
-			m_elementPointer = new float(static_cast<float>(atof(text + 1)));
-		}
-		else
-		{
-			m_elementSize = sizeof(double);
-			m_elementPointer = new double(atof(text));
-		}
-		m_format = DataFormat::REAL;
-		return;
-	}
-
-	// REAL array
-	if (text[0] == '{' && (text[1] == '$' || ('0' <= text[1] && text[1] <= '9') || text[1] == '-'))
-	{
-		bool f = text[1] == '$';
-
-		int c = 1;
-		{
-			const char* p = text + (f ? 2 : 1);
-			while (true)
-			{
-				if (p[0] == ',')
-					++c;
-				else if (p[0] == '}')
-					break;
-				else if (p[0] == '\0')
-					throw;
-				++p;
-			}
-		}
-		m_elementCount = c;
-		if (f)
-		{
-			m_elementSize = sizeof(float);
-			m_elementPointer = new float[c];
-
-			const char* p = text + 2;
-			for (int i = 0; i < c; ++i)
-			{
-				static_cast<float*>(m_elementPointer)[i] = static_cast<float>(atof(p));
-				while (true)
-				{
-					++p;
-					if (p[0] == ',' && p[1] == '$')
-					{
-						p += 2;
-						break;
-					}
-					else if ((p[0] == '}') && (i == c - 1))
-						break;
-					else if (p[0] == '\0')
-						throw;
-				}
-			}
-		}
-		else
-		{
-			m_elementSize = sizeof(double);
-			m_elementPointer = new double[c];
-
-			const char* p = text + 1;
-			for (int i = 0; i < c; ++i)
-			{
-				static_cast<double*>(m_elementPointer)[i] = atof(p);
-				while (true)
-				{
-					++p;
-					if (p[0] == ',')
-					{
-						++p;
-						break;
-					}
-					else if ((p[0] == '}') && (i == c - 1))
-						break;
-					else if (p[0] == '\0')
-						throw;
-				}
-			}
-		}
-		m_format = DataFormat::REAL;
-		return;
-	}
-
-	// BOOL
-	if (text[0] == 'f' || text[0] == 't')
-	{
-		m_elementSize = sizeof(bool);
-		m_elementPointer = new bool(text[0] == 't');
-		m_format = DataFormat::BOOL;
-		return;
-	}
-
-	// BOOL array
-	if (text[0] == '{' && (text[1] == 't' || text[1] == 'f'))
-	{
-		int c = 1;
-		{
-			const char* p = text;
-			while (true)
-			{
-				if (p[0] == ',')
-					++c;
-				else if (p[0] == '}')
-					break;
-				else if (p[0] == '\0')
-					throw;
-				++p;
-			}
-		}
-		m_elementSize = sizeof(bool);
-		m_elementCount = c;
-		m_elementPointer = new bool[c];
-		m_format = DataFormat::BOOL;
-
-		const char* p = text + 1;
-		for (int i = 0; i < c; ++i)
-		{
-			static_cast<bool*>(m_elementPointer)[i] = p[0] == 't';
-			while (true)
-			{
-				++p;
-				if (p[0] == ',')
-				{
-					++p;
-					break;
-				}
-				else if ((p[0] == '}') && (i == c - 1))
-					break;
-				else if (p[0] == '\0')
-					throw;
-			}
-		}
-		return;
-	}
-
-	// TEXT
-	if (text[0] == '\'')
-	{
-		m_elementSize = sizeof(char);
-		m_elementPointer = new char(text[1]);
-		m_format = DataFormat::TEXT;
-		return;
-	}
-
-	// TEXT array
-	if (text[0] == '\"')
-	{
-		int c = 1;
-		{
-			const char* p = text + 1;
-			while (true)
-			{
-				if (p[0] == '\"')
-					break;
-				else if (p[0] == '\0')
-					throw;
-				++p;
-				++c;
-			}
-		}
-		m_elementSize = sizeof(char);
-		m_elementCount = c;
-		m_elementPointer = new char[c];
-		m_format = DataFormat::TEXT;
-
-		if (c >= 2)
-			memcpy(m_elementPointer, text + 1, sizeof(char) * (c - 1));
-
-		static_cast<char*>(m_elementPointer)[c - 1] = '\0';
-
-		return;
-	}
-
-	throw;
+	m_elementCount = c;
+	m_elementPointer = new char[c];
+	memcpy(m_elementPointer, text, m_elementSize * c);
 }
 
 inline DataItem::DataItem(const DataItem& rhs)
@@ -623,6 +351,341 @@ inline DataItem& DataItem::operator=(DataItem&& rhs) noexcept
 inline DataItem::~DataItem()
 {
 	deleteData();
+}
+
+inline DataItem DataItem::createFromFormat(const char* format)
+{
+	DataItem item;
+	item.m_text = format;
+	item.m_cache = true;
+
+	// HEX
+	if (format[0] == '0' && format[1] == 'x')
+	{
+		const char* p = format + 2;
+		int s = 0;
+		uint64_t v = 0;
+		while (p[0] != '\0') {
+			v <<= 4;
+			if ('0' <= p[0] && p[0] <= '9')
+				v += p[0] - '0';
+			else if ('A' <= p[0] && p[0] <= 'F')
+				v += p[0] - 'A' + 10;
+			else
+				throw;
+			++p;
+			++s;
+		}
+		s >>= 1;
+		switch (s)
+		{
+		case 1: item.m_elementPointer = new uint8_t(static_cast<uint8_t>(v)); break;
+		case 2: item.m_elementPointer = new uint16_t(static_cast<uint16_t>(v)); break;
+		case 4: item.m_elementPointer = new uint32_t(static_cast<uint32_t>(v)); break;
+		case 8: item.m_elementPointer = new uint64_t(static_cast<uint64_t>(v)); break;
+		default: throw;
+		}
+		item.m_elementSize = s;
+		return item;
+	}
+
+	// HEX array
+	if (format[0] == '{' && format[1] == '0' && format[2] == 'x')
+	{
+		int c = 1;
+		int s = 0;
+		{
+			const char* p = format + 3;
+			while (true)
+			{
+				if (p[0] == ',')
+					++c;
+				else if (p[0] == '}')
+					break;
+				else if (p[0] == '\0')
+					throw;
+				++p;
+			}
+			p = format + 3;
+			while (('0' <= p[0] && p[0] <= '9') || ('A' <= p[0] && p[0] <= 'F'))
+			{
+				++p;
+				++s;
+			}
+			s >>= 1;
+		}
+		item.m_elementCount = c;
+		item.m_elementSize = s;
+		switch (s)
+		{
+		case 1: item.m_elementPointer = new uint8_t[c]; break;
+		case 2: item.m_elementPointer = new uint16_t[c]; break;
+		case 4: item.m_elementPointer = new uint32_t[c]; break;
+		case 8: item.m_elementPointer = new uint64_t[c]; break;
+		default: throw;
+		}
+
+		const char* p = format + 3;
+		for (int i = 0; i < c; ++i)
+		{
+			uint64_t v = 0;
+			while (true) {
+				if ('0' <= p[0] && p[0] <= '9')
+				{
+					v <<= 4;
+					v += p[0] - '0';
+				}
+				else if ('A' <= p[0] && p[0] <= 'F')
+				{
+					v <<= 4;
+					v += p[0] - 'A' + 10;
+				}
+				else if (p[0] == ',' && p[1] == '0' && p[2] == 'x')
+				{
+					p += 3;
+					break;
+				}
+				else if ((p[0] == '}') && (i == c - 1))
+					break;
+				else
+					throw;
+				++p;
+			}
+
+			switch (s)
+			{
+			case 1: static_cast<uint8_t*>(item.m_elementPointer)[i] = static_cast<uint8_t>(v); break;
+			case 2: static_cast<uint16_t*>(item.m_elementPointer)[i] = static_cast<uint16_t>(v); break;
+			case 4: static_cast<uint32_t*>(item.m_elementPointer)[i] = static_cast<uint32_t>(v); break;
+			case 8: static_cast<uint64_t*>(item.m_elementPointer)[i] = static_cast<uint64_t>(v); break;
+			}
+		}
+		return item;
+	}
+
+	// REAL
+	if (format[0] == '$' || ('0' <= format[0] && format[0] <= '9') || format[0] == '-')
+	{
+		const char* p = format;
+		if (format[0] == '$')
+		{
+			item.m_elementSize = sizeof(float);
+			item.m_elementPointer = new float(static_cast<float>(atof(format + 1)));
+		}
+		else
+		{
+			item.m_elementSize = sizeof(double);
+			item.m_elementPointer = new double(atof(format));
+		}
+		item.m_format = DataFormat::REAL;
+		return item;
+	}
+
+	// REAL array
+	if (format[0] == '{' && (format[1] == '$' || ('0' <= format[1] && format[1] <= '9') || format[1] == '-'))
+	{
+		bool f = format[1] == '$';
+
+		int c = 1;
+		{
+			const char* p = format + (f ? 2 : 1);
+			while (true)
+			{
+				if (p[0] == ',')
+					++c;
+				else if (p[0] == '}')
+					break;
+				else if (p[0] == '\0')
+					throw;
+				++p;
+			}
+		}
+		item.m_elementCount = c;
+		if (f)
+		{
+			item.m_elementSize = sizeof(float);
+			item.m_elementPointer = new float[c];
+
+			const char* p = format + 2;
+			for (int i = 0; i < c; ++i)
+			{
+				static_cast<float*>(item.m_elementPointer)[i] = static_cast<float>(atof(p));
+				while (true)
+				{
+					++p;
+					if (p[0] == ',' && p[1] == '$')
+					{
+						p += 2;
+						break;
+					}
+					else if ((p[0] == '}') && (i == c - 1))
+						break;
+					else if (p[0] == '\0')
+						throw;
+				}
+			}
+		}
+		else
+		{
+			item.m_elementSize = sizeof(double);
+			item.m_elementPointer = new double[c];
+
+			const char* p = format + 1;
+			for (int i = 0; i < c; ++i)
+			{
+				static_cast<double*>(item.m_elementPointer)[i] = atof(p);
+				while (true)
+				{
+					++p;
+					if (p[0] == ',')
+					{
+						++p;
+						break;
+					}
+					else if ((p[0] == '}') && (i == c - 1))
+						break;
+					else if (p[0] == '\0')
+						throw;
+				}
+			}
+		}
+		item.m_format = DataFormat::REAL;
+		return item;
+	}
+
+	// BOOL
+	if (format[0] == 'f' || format[0] == 't')
+	{
+		item.m_elementSize = sizeof(bool);
+		item.m_elementPointer = new bool(format[0] == 't');
+		item.m_format = DataFormat::BOOL;
+		return item;
+	}
+
+	// BOOL array
+	if (format[0] == '{' && (format[1] == 't' || format[1] == 'f'))
+	{
+		int c = 1;
+		{
+			const char* p = format;
+			while (true)
+			{
+				if (p[0] == ',')
+					++c;
+				else if (p[0] == '}')
+					break;
+				else if (p[0] == '\0')
+					throw;
+				++p;
+			}
+		}
+		item.m_elementSize = sizeof(bool);
+		item.m_elementCount = c;
+		item.m_elementPointer = new bool[c];
+		item.m_format = DataFormat::BOOL;
+
+		const char* p = format + 1;
+		for (int i = 0; i < c; ++i)
+		{
+			static_cast<bool*>(item.m_elementPointer)[i] = p[0] == 't';
+			while (true)
+			{
+				++p;
+				if (p[0] == ',')
+				{
+					++p;
+					break;
+				}
+				else if ((p[0] == '}') && (i == c - 1))
+					break;
+				else if (p[0] == '\0')
+					throw;
+			}
+		}
+		return item;
+	}
+
+	// TEXT char
+	if (format[0] == '\'')
+	{
+		item.m_elementSize = sizeof(char);
+		item.m_elementPointer = new char(format[1]);
+		item.m_format = DataFormat::TEXT;
+		return item;
+	}
+
+	// TEXT char array
+	if (format[0] == '{' && format[1] == '\'')
+	{
+		int c = 1;
+		{
+			const char* p = format;
+			while (true)
+			{
+				if (p[0] == ',')
+					++c;
+				else if (p[0] == '}')
+					break;
+				else if (p[0] == '\0')
+					throw;
+				++p;
+			}
+		}
+		item.m_elementSize = sizeof(char);
+		item.m_elementCount = c;
+		item.m_elementPointer = new char[c];
+		item.m_format = DataFormat::TEXT;
+
+		const char* p = format + 1;
+		for (int i = 0; i < c; ++i)
+		{
+			if (p[0] == '\0' || p[1] == '\0' || p[2] == '\0' || p[3] == '\0')
+				throw;
+
+			if (p[0] == '\'' && p[2] == '\'')
+			{
+				static_cast<char*>(item.m_elementPointer)[i] = p[1];
+
+				if (p[3] == ',')
+					p += 4;
+				else if (p[3] != '}')
+					throw;
+			}
+		}
+		return item;
+	}
+
+	// TEXT string
+	if (format[0] == '\"')
+	{
+		int c = 1;
+		{
+			const char* p = format + 1;
+			while (true)
+			{
+				if (p[0] == '\"')
+					break;
+				else if (p[0] == '\0')
+					throw;
+				++p;
+				++c;
+			}
+		}
+		item.m_elementSize = sizeof(char);
+		item.m_elementCount = c;
+		item.m_elementPointer = new char[c];
+		item.m_format = DataFormat::TEXT;
+
+		if (c >= 2)
+			memcpy(item.m_elementPointer, format + 1, sizeof(char) * (c - 1));
+
+		static_cast<char*>(item.m_elementPointer)[c - 1] = '\0';
+
+		return item;
+	}
+
+	throw;
+	return item;
 }
 
 inline const char* DataItem::operator()() const
@@ -753,9 +816,22 @@ inline const char* DataItem::operator()() const
 		}
 		else
 		{
-			m_text = '\"';
-			m_text.append(static_cast<char*>(m_elementPointer));
-			m_text.append("\"");
+			if (static_cast<char*>(m_elementPointer)[m_elementCount - 1] == '\0')
+			{
+				m_text = '\"';
+				m_text.append(static_cast<char*>(m_elementPointer));
+				m_text.append("\"");
+			}
+			else
+			{
+				m_text = "{";
+				for (int c = 0; c < m_elementCount; ++c)
+				{
+					sprintf_s(buf, "\'%c\',", static_cast<char*>(m_elementPointer)[c]);
+					m_text.append(buf);
+				}
+				m_text[m_text.size() - 1] = '}';
+			}
 		}
 	}
 	break;

@@ -238,7 +238,7 @@ inline void DataBox::input(const std::string& formatText)
 			// (DataItemName)Value
 
 			// add("DataItemName", DataItem("Value");
-			add(formatText.substr(i + 1, j - i - 1).c_str(), DataItem(formatText.substr(j + 1, k - j - 1).c_str()));
+			add(formatText.substr(i + 1, j - i - 1).c_str(), DataItem::createFromFormat(formatText.substr(j + 1, k - j - 1).c_str()));
 
 			// Ÿ‚É++i‚³‚ê‚é‚Ì‚Å‚±‚±‚Å‰üs‚ğw‚µ‚Ä‚¨‚­‚Æ’š“x‚¢‚¢
 			i = k;

@@ -37,7 +37,7 @@ int main(void)
 			DataBox fruit;
 			{
 				DataBox apple;
-				apple.add("色", DataItem("赤", sizeof("赤")));
+				apple.add("色", DataItem("赤"));
 				apple.add("丸い", DataItem(true));
 				apple.add("甘さ", DataItem(10));
 				fruit.add("りんご", std::move(apple));
@@ -55,6 +55,8 @@ int main(void)
 			{
 				DataBox cucumber;
 				cucumber.add("ランク", DataItem('A'));
+				const char mystery[] = { 'm', 'y', 's', 't', 'e', 'r', 'y' };
+				cucumber.add("謎", DataItem(mystery, sizeof(mystery)));
 				vegetable.add("きゅうり", std::move(cucumber));
 			}
 			food.add("野菜", std::move(vegetable));
@@ -65,9 +67,9 @@ int main(void)
 		DataBox vehicle;
 		{
 			DataBox car;
-			car.add("1", DataItem("レギュラー", sizeof("レギュラー")));
-			car.add("2", DataItem("ハイオク", sizeof("ハイオク")));
-			car.add("3", DataItem("軽油", sizeof("軽油")));
+			car.add("1", DataItem("レギュラー"));
+			car.add("2", DataItem("ハイオク"));
+			car.add("3", DataItem("軽油"));
 			int gasoline[] = {1, 2, 3};
 			car.add("ガソリン", DataItem(gasoline, 3));
 			vehicle.add("車", std::move(car));
