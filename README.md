@@ -13,4 +13,4 @@
 ## 備考
 - どのデータをどの型として扱うかはユーザー管理
 - 誤った操作をした場合例外を出す
-- リメイク版→[FreeDataAccess2](https://github.com/Ameyasu/FreeDataAccess2)
+- リメイク版[FreeDataAccess2](https://github.com/Ameyasu/FreeDataAccess2)
